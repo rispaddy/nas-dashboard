@@ -101,9 +101,16 @@ def init_db():
             agent_credits INTEGER,
             agent_net REAL,
             agent_commission REAL,
+            sales_count INTEGER DEFAULT 0,
             UNIQUE(month_label, agent_name)
         )
     ''')
+
+    # Add sales_count column if it doesn't exist (migration from old schema)
+    try:
+        c.execute('ALTER TABLE sales_agent_kpis ADD COLUMN sales_count INTEGER DEFAULT 0')
+    except:
+        pass
 
     # Sales records (daily log deals)
     c.execute('''
@@ -433,10 +440,10 @@ def api_sales_summary():
     for a in agents:
         c.execute('''
             INSERT OR REPLACE INTO sales_agent_kpis
-            (month_label, agent_name, agent_volume, agent_credits, agent_net, agent_commission)
-            VALUES (?, ?, ?, ?, ?, ?)
+            (month_label, agent_name, agent_volume, agent_credits, agent_net, agent_commission, sales_count)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
         ''', (month, a.get('name', ''), a.get('volume', 0), a.get('credits', 0),
-              a.get('net', 0), a.get('commission', 0)))
+              a.get('net', 0), a.get('commission', 0), a.get('sales_count', 0)))
 
     conn.commit()
     conn.close()

@@ -86,6 +86,7 @@ def init_db():
             total_volume REAL,
             total_commission REAL,
             total_deals INTEGER,
+            spiFF REAL DEFAULT 0,
             updated_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
     ''')
@@ -419,13 +420,14 @@ def api_sales_summary():
     total_volume = data.get('total_volume', 0)
     total_commission = data.get('total_commission', 0)
     total_deals = data.get('total_deals', 0)
+    spiFF = data.get('spiFF', 0)
     agents = data.get('agents', [])
 
     # Upsert total KPI
     c.execute('''
-        INSERT OR REPLACE INTO sales_kpis (month_label, total_volume, total_commission, total_deals, updated_at)
-        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-    ''', (month, total_volume, total_commission, total_deals))
+        INSERT OR REPLACE INTO sales_kpis (month_label, total_volume, total_commission, total_deals, spiFF, updated_at)
+        VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    ''', (month, total_volume, total_commission, total_deals, spiFF))
 
     # Upsert agent KPIs
     for a in agents:
@@ -439,6 +441,21 @@ def api_sales_summary():
     conn.commit()
     conn.close()
     return jsonify({'status': 'ok'})
+
+@app.route('/api/sales/spiFF', methods=['POST'])
+def api_sales_spiff():
+    data = request.json
+    conn = get_db()
+    c = conn.cursor()
+    month = data.get('month', '')
+    spiFF = data.get('spiFF', 0)
+    c.execute('''
+        UPDATE sales_kpis SET spiFF = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE month_label = ?
+    ''', (spiFF, month))
+    conn.commit()
+    conn.close()
+    return jsonify({'status': 'ok', 'spiFF': spiFF})
 
 @app.route('/api/sales/deals', methods=['POST'])
 def api_sales_deals():

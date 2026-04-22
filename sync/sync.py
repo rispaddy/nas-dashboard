@@ -164,6 +164,14 @@ def sheets_get(range_name):
         data = json.loads(resp.read())
     return data.get("values", [])
 
+def sheets_update(range_name, values):
+    token = get_google_token()
+    url = f"https://sheets.googleapis.com/v4/spreadsheets/{SALES_SPREADSHEET_ID}/values/{urllib.parse.quote(range_name)}?valueInputOption=RAW"
+    body = json.dumps({"values": values}).encode()
+    req = urllib.request.Request(url, data=body, headers={"Authorization": f"Bearer {token['access_token']}", "Content-Type": "application/json"}, method="PUT")
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        return json.loads(resp.read())
+
 def sync_sales():
     try:
         summary = sheets_get("Monthly Summary")
@@ -329,17 +337,47 @@ def sync_polymarket():
         print(f"  [ERROR] Polymarket sync failed: {e}")
         return True
 
+# ── SPIFF ───────────────────────────────────────────────────────────────────────
+
+def set_spiff(amount):
+    """Set SPIFF bonus for current month in dashboard and Google Sheets."""
+    if not amount:
+        return
+    month = datetime.now().strftime("%b %Y")
+    # Update dashboard
+    result, status = post("/api/sales/spiFF", {"month": month, "spiFF": amount})
+    if result:
+        print(f"  [OK] SPIFF set to ${amount} for {month}")
+    else:
+        print(f"  [FAIL] SPIFF update failed ({status})")
+    # Update Google Sheets TOTAL row (col H)
+    try:
+        summary = sheets_get("Monthly Summary")
+        for i, row in enumerate(summary):
+            if len(row) >= 2 and row[1].strip().upper() == "TOTAL":
+                range_name = f"'Monthly Summary'!H{i+1}:H{i+1}"
+                sheets_update(range_name, [[amount]])
+                print(f"  [OK] Google Sheets TOTAL row H{i+1} updated")
+                break
+    except Exception as e:
+        print(f"  [FAIL] Google Sheets SPIFF update failed: {e}")
+
 # ── Main ───────────────────────────────────────────────────────────────────────
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--once", action="store_true", help="Sync once and exit")
+    parser.add_argument("--spiff", type=float, default=None, help="Set SPIFF bonus amount")
     args = parser.parse_args()
 
     print(f"=== NAS Dashboard Sync ===")
     print(f"URL: {DASHBOARD_URL}")
     print(f"Time: {datetime.now().isoformat()}")
     print()
+
+    if args.spiff is not None:
+        set_spiff(args.spiff)
+        return
 
     sync_tasks()
     sync_calendar()

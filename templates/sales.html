@@ -17,7 +17,7 @@
         <div class="card stat-card">
             <div class="card-body text-center">
                 <div class="stat-icon text-success"><i class="bi bi-graph-up-arrow"></i></div>
-                <div class="stat-value">${{ "{:,.0f}"|format(latest_kpi.total_volume|default(0)) }}</div>
+                <div class="stat-value">${{ "{:,.0f}".format(latest_kpi.total_volume|default(0)|int) }}</div>
                 <div class="stat-label">Total Sales Volume</div>
             </div>
         </div>
@@ -26,7 +26,7 @@
         <div class="card stat-card">
             <div class="card-body text-center">
                 <div class="stat-icon text-warning"><i class="bi bi-cash-stack"></i></div>
-                <div class="stat-value">${{ "{:,.2f}"|format((latest_kpi.total_commission|default(0)) - (latest_kpi.spiFF|default(0))) }}</div>
+                <div class="stat-value">${{ "{:,.2f}".format((latest_kpi.total_commission|default(0) - latest_kpi.spiFF|default(0))) }}</div>
                 <div class="stat-label">Total Commission</div>
             </div>
         </div>
@@ -35,7 +35,7 @@
         <div class="card stat-card">
             <div class="card-body text-center">
                 <div class="stat-icon text-info"><i class="bi bi-trophy"></i></div>
-                <div class="stat-value">${{ "{:,.2f}"|format(latest_kpi.spiFF|default(0)) }}</div>
+                <div class="stat-value">${{ "{:,.2f}".format(latest_kpi.spiFF|default(0)) }}</div>
                 <div class="stat-label">SPIFF</div>
             </div>
         </div>
@@ -75,9 +75,9 @@
                     <tr>
                         <td><strong>{{ row.agent_name }}</strong></td>
                         <td class="text-center">{{ row.sales_count|default(1) }}</td>
-                        <td class="text-end">${{ "{:,.0f}"|format(row.agent_volume|default(0)) }}</td>
-                        <td class="text-end">{{ "{:,}".format(row.agent_credits|default(0)) }}</td>
-                        <td class="text-end text-warning">${{ "{:,.2f}"|format(row.agent_commission|default(0)) }}</td>
+                        <td class="text-end">${{ "{:,.0f}".format(row.agent_volume|default(0)|int) }}</td>
+                        <td class="text-end">{{ "{:,}".format(row.agent_credits|default(0)|int) }}</td>
+                        <td class="text-end text-warning">${{ "{:,.2f}".format(row.agent_commission|default(0)) }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -114,8 +114,8 @@
                         <td>{{ deal.date }}</td>
                         <td><code>{{ deal.sales_no }}</code></td>
                         <td>{{ deal.subordinate }}</td>
-                        <td class="text-end">${{ "{:,.0f}"|format(deal.sold_amount|default(0)) }}</td>
-                        <td class="text-end text-warning">${{ "{:,.2f}"|format(deal.manager_commission|default(0)) }}</td>
+                        <td class="text-end">${{ "{:,.0f}".format(deal.sold_amount|default(0)|int) }}</td>
+                        <td class="text-end text-warning">${{ "{:,.2f}".format(deal.manager_commission|default(0)) }}</td>
                         <td><span class="badge bg-{{ 'success' if deal.status=='completed' else 'warning' }}">{{ deal.status }}</span></td>
                     </tr>
                     {% endfor %}
@@ -150,9 +150,9 @@
                     {% for row in total_kpis %}
                     <tr>
                         <td><span class="badge bg-primary">{{ row.month_label }}</span></td>
-                        <td class="text-end">${{ "{:,.0f}"|format(row.total_volume|default(0)) }}</td>
-                        <td class="text-end text-warning">${{ "{:,.2f}"|format((row.total_commission|default(0)) - (row.spiFF|default(0))) }}</td>
-                        <td class="text-end text-info">${{ "{:,.2f}"|format(row.spiFF|default(0)) }}</td>
+                        <td class="text-end">${{ "{:,.0f}".format(row.total_volume|default(0)|int) }}</td>
+                        <td class="text-end text-warning">${{ "{:,.2f}".format(row.total_commission|default(0) - row.spiFF|default(0)) }}</td>
+                        <td class="text-end text-info">${{ "{:,.2f}".format(row.spiFF|default(0)) }}</td>
                         <td class="text-end">{{ row.total_deals|default(0) }}</td>
                     </tr>
                     {% endfor %}

@@ -276,11 +276,21 @@ def sales():
     latest_kpi = dict(row) if row else None
 
     # Get all KPIs for chart (both total and agent)
+    # Deduplicate by month_label (keep latest entry per month)
     c.execute('SELECT * FROM sales_kpis ORDER BY month_label ASC')
-    total_kpis = [dict(row) for row in c.fetchall()]
+    all_kpis_raw = [dict(row) for row in c.fetchall()]
+    seen_months = set()
+    total_kpis = []
+    for row in all_kpis_raw:
+        if row['month_label'] not in seen_months:
+            seen_months.add(row['month_label'])
+            total_kpis.append(row)
 
     c.execute('SELECT * FROM sales_agent_kpis ORDER BY month_label ASC, agent_volume DESC')
     agent_kpis = [dict(row) for row in c.fetchall()]
+
+    # Precompute max agent volume for bar chart scaling (in template)
+    max_agent_volume = max((r['agent_volume'] or 0) for r in agent_kpis) if agent_kpis else 0
 
     # Recent sales (last 14 days)
     two_weeks_ago = (datetime.now() - timedelta(days=14)).strftime('%Y-%m-%d')
@@ -311,7 +321,8 @@ def sales():
         total_kpis=total_kpis,
         agent_kpis=agent_kpis,
         recent_sales=recent_sales,
-        agent_breakdown=agent_breakdown
+        agent_breakdown=agent_breakdown,
+        max_agent_volume=max_agent_volume
     )
 
 @app.route('/polymarket')

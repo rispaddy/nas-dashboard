@@ -66,18 +66,36 @@
                         <th>Sales Rep</th>
                         <th class="text-center">Deals</th>
                         <th class="text-end">Volume</th>
+                        <th style="min-width:140px">Volume %</th>
                         <th class="text-end">Credits</th>
                         <th class="text-end">Commission</th>
+                        <th class="text-center">Comm %</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for row in agent_kpis %}
+                    {% set vol = row.agent_volume|default(0)|int %}
+                    {% set comm = row.agent_commission|default(0) %}
+                    {% set comm_pct = ((comm / vol * 100) if vol > 0 else 0)|round(1) %}
+                    {% set vol_pct = ((vol / max_agent_volume * 100) if max_agent_volume > 0 else 0)|round(0) %}
                     <tr>
                         <td><strong>{{ row.agent_name }}</strong></td>
                         <td class="text-center">{{ row.sales_count|default(1) }}</td>
-                        <td class="text-end">${{ "{:,.0f}".format(row.agent_volume|default(0)|int) }}</td>
+                        <td class="text-end">${{ "{:,.0f}".format(vol) }}</td>
+                        <td>
+                            <div class="d-flex align-items-center gap-2">
+                                <div class="progress flex-grow-1" style="height:6px; background:rgba(255,255,255,0.1);">
+                                    <div class="progress-bar bg-primary" style="width:{{ vol_pct }}%"></div>
+                                </div>
+                                <small class="text-muted" style="min-width:36px;text-align:right">{{ vol_pct }}%</small>
+                            </div>
+                        </td>
                         <td class="text-end">{{ "{:,}".format(row.agent_credits|default(0)|int) }}</td>
-                        <td class="text-end text-warning">${{ "{:,.2f}".format(row.agent_commission|default(0)) }}</td>
+                        <td class="text-end text-warning">${{ "{:,.2f}".format(comm) }}</td>
+                        <td class="text-center">
+                            <span class="badge bg-{{ 'success' if comm_pct >= 3 else 'warning' if comm_pct >= 2 else 'secondary' }}">{{ comm_pct }}%
+                            </span>
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -101,7 +119,7 @@
                 <thead>
                     <tr>
                         <th>Date</th>
-                        <th>Sales #</th>
+                        <th class="text-center">Sales #</th>
                         <th>Agent</th>
                         <th class="text-end">Volume</th>
                         <th class="text-end">Commission</th>
@@ -112,7 +130,7 @@
                     {% for deal in recent_sales %}
                     <tr>
                         <td>{{ deal.date }}</td>
-                        <td><code>{{ deal.sales_no }}</code></td>
+                        <td class="text-center"><code>{{ deal.sales_no }}</code></td>
                         <td>{{ deal.subordinate }}</td>
                         <td class="text-end">${{ "{:,.0f}".format(deal.sold_amount|default(0)|int) }}</td>
                         <td class="text-end text-warning">${{ "{:,.2f}".format(deal.manager_commission|default(0)) }}</td>
@@ -147,7 +165,7 @@
                     </tr>
                 </thead>
                 <tbody>
-                    {% for row in total_kpis %}
+                    {% for row in total_kpis|reverse %}
                     <tr>
                         <td><span class="badge bg-primary">{{ row.month_label }}</span></td>
                         <td class="text-end">${{ "{:,.0f}".format(row.total_volume|default(0)|int) }}</td>

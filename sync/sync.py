@@ -11,14 +11,29 @@ from pathlib import Path
 BASE_DIR = Path(__file__).parent.parent
 DASHBOARD_URL = os.environ.get("DASHBOARD_URL", "http://100.102.165.11:5004")
 PORTFOLIO_FILE = os.environ.get("PORTFOLIO_FILE", os.path.expanduser("~/.openclaw/workspace/polymarket-paper-trading/portfolio.json"))
-TOKEN_PATH = os.environ.get("GOOGLE_TOKEN_PATH", os.path.expanduser("~/.hermes/google_token.json"))
+# Fallback paths for NAS deployment (Mac paths)
+if not os.path.exists(PORTFOLIO_FILE):
+    for fallback in ["/home/rispaddy/.openclaw/workspace/polymarket-paper-trading/portfolio.json"]:
+        if os.path.exists(fallback):
+            PORTFOLIO_FILE = fallback
+            break
+TOKEN_PATH=os.environ.get("GOOGLE_TOKEN_FILE", os.path.expanduser("~/.hermes/google_token.json"))
 MEMORY_DIR = os.environ.get("MEMORY_DIR", os.path.expanduser("~/.hermes"))
+if not os.path.exists(MEMORY_DIR):
+    for fallback in ["/home/rispaddy/.hermes"]:
+        if os.path.exists(fallback):
+            MEMORY_DIR = fallback
+            break
 SALES_SPREADSHEET_ID = "1BpsjfAbt4ExbaQT79JjI2fCKO4SP4M8mI8isUV-UsBg"
 TASKS_DB = os.environ.get("TASKS_DB", os.path.expanduser("~/.hermes/task_dashboard/tasks.db"))
 
 def get_google_token():
-    with open(TOKEN_PATH) as f:
-        return json.load(f)
+    # Try default path first, then fallback to Mac path (for NAS deployment)
+    for path in [TOKEN_PATH, "/home/rispaddy/.hermes/google_token.json"]:
+        if os.path.exists(path):
+            with open(path) as f:
+                return json.load(f)
+    raise FileNotFoundError(f"google_token.json not found at {TOKEN_PATH} or /home/rispaddy/.hermes/google_token.json")
 
 def post(endpoint, data):
     url = f"{DASHBOARD_URL}{endpoint}"

@@ -442,6 +442,17 @@ def api_sales_summary():
     conn.close()
     return jsonify({'status': 'ok'})
 
+@app.route('/api/sales/kpi', methods=['GET'])
+def api_sales_kpi():
+    conn = get_db()
+    c = conn.cursor()
+    c.execute('SELECT * FROM sales_kpis ORDER BY month_label DESC LIMIT 1')
+    row = c.fetchone()
+    conn.close()
+    if row:
+        return jsonify(dict(row))
+    return jsonify({})
+
 @app.route('/api/sales/spiFF', methods=['POST'])
 def api_sales_spiff():
     data = request.json

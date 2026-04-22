@@ -209,12 +209,24 @@ def sync_sales():
                 "commission": float(str(row[6]).replace(",","").replace("$","")) if row[6] else 0,
             })
 
+    # Get current SPIFF from dashboard before overwriting
+    current_spiff = 0
+    try:
+        import urllib.request
+        req = urllib.request.Request(f"{DASHBOARD_URL}/api/sales/kpi")
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read())
+            current_spiff = data.get("spiFF", 0) if data else 0
+    except:
+        pass
+
     # Send KPI summary (total row only)
     kpi_data = {
         "month": month_label,
         "total_volume": total_volume,
         "total_commission": total_commission,
         "total_deals": total_deals,
+        "spiFF": current_spiff,
         "agents": agents,
     }
     result, status = post("/api/sales/summary", kpi_data)

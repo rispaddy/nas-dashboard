@@ -184,44 +184,84 @@ def sync_sales():
         print("  [SKIP] Monthly Summary sheet empty")
         return False
 
-    # Parse monthly KPI data (separate agent rows from TOTAL row)
+    # Get month label and SPIFF from Monthly Summary TOTAL row
     month_label = summary[1][0] if len(summary) > 1 else "Current"
-    agents = []
-    total_volume = 0
-    total_commission = 0
-    total_deals = 0
-
+    current_spiff = 0
     for row in summary[1:]:
-        if len(row) < 7:
-            continue
-        name = row[1].strip()
-        if name.upper() == "TOTAL":
-            total_volume = float(str(row[3]).replace(",","").replace("$","")) if row[3] else 0
-            total_commission = float(str(row[6]).replace(",","").replace("$","")) if row[6] else 0
-            total_deals = int(row[2]) if str(row[2]).isdigit() else 0
-            spiFF_col = float(str(row[7]).replace(",","").replace("$","")) if len(row) > 7 and row[7] else 0
-        elif name:
-            agents.append({
-                "name": name,
-                "sales_count": int(row[2]) if str(row[2]).isdigit() else 0,
-                "volume": float(str(row[3]).replace(",","").replace("$","")) if row[3] else 0,
-                "credits": int(row[4]) if str(row[4]).isdigit() else 0,
-                "net": float(str(row[5]).replace(",","").replace("$","")) if row[5] else 0,
-                "commission": float(str(row[6]).replace(",","").replace("$","")) if row[6] else 0,
+        if len(row) >= 2 and str(row[1]).strip().upper() == "TOTAL":
+            current_spiff = float(str(row[7]).replace(",","").replace("$","")) if len(row) > 7 and row[7] else 0
+            break
+
+    # Compute agent stats from Daily Log (source of truth for deals/volumes)
+    # Monthly Summary can be stale; Daily Log is always correct
+    agent_data = {}  # name -> {sales_count, volume, credits, net, commission}
+    all_deals = []
+
+    if daily and len(daily) > 1:
+        for row in daily[1:]:  # Skip header
+            if len(row) < 9:
+                continue
+            name = row[2].strip()
+            if not name:
+                continue
+
+            sold = float(str(row[3]).replace(",","").replace("$","")) if row[3] else 0
+            net = float(str(row[4]).replace(",","").replace("$","")) if row[4] else 0
+            vol_credits = int(row[6]) if str(row[6]).isdigit() else 0
+            commission = float(row[8]) if row[8] else 0
+
+            if name not in agent_data:
+                agent_data[name] = {"sales_count": 0, "volume": 0, "credits": 0, "net": 0, "commission": 0}
+            agent_data[name]["sales_count"] += 1
+            agent_data[name]["volume"] += sold
+            agent_data[name]["credits"] += vol_credits
+            agent_data[name]["net"] += net
+            agent_data[name]["commission"] += commission
+
+            all_deals.append({
+                "date": row[0],
+                "sales_no": row[1],
+                "subordinate": name,
+                "sold_amount": sold,
+                "net_price": net,
+                "deposit_pct": row[5],
+                "volume_credits": vol_credits,
+                "commission_rule": row[7],
+                "manager_commission": commission,
+                "status": row[9] if len(row) > 9 else "completed",
+                "notes": row[10] if len(row) > 10 else "",
             })
 
-    # Get current SPIFF from dashboard before overwriting
-    current_spiff = 0
+    # Build agents list from Daily Log (source of truth)
+    agents = [
+        {
+            "name": name,
+            "sales_count": data["sales_count"],
+            "volume": data["volume"],
+            "credits": data["credits"],
+            "net": data["net"],
+            "commission": round(data["commission"], 2),
+        }
+        for name, data in agent_data.items()
+    ]
+
+    # Compute totals from Daily Log (not Monthly Summary, which can be stale)
+    total_volume = sum(a["volume"] for a in agents)
+    total_commission = sum(a["commission"] for a in agents)
+    total_deals = sum(a["sales_count"] for a in agents)
+
+    # Get current SPIFF from dashboard before overwriting (preserves manual set)
     try:
         import urllib.request
         req = urllib.request.Request(f"{DASHBOARD_URL}/api/sales/kpi")
         with urllib.request.urlopen(req, timeout=5) as resp:
             data = json.loads(resp.read())
-            current_spiff = data.get("spiFF", 0) if data else 0
+            dashboard_spiff = data.get("spiFF", 0) if data else 0
+            # Use whichever is larger (dashboard SPIFF vs Monthly Summary SPIFF)
+            current_spiff = max(current_spiff, dashboard_spiff)
     except:
         pass
 
-    # Send KPI summary (total row only)
     # Add SPIFF to commission for display total
     total_commission_with_spiff = total_commission + current_spiff
 
@@ -239,30 +279,11 @@ def sync_sales():
     else:
         print(f"  [FAIL] Sales KPIs sync failed ({status})")
 
-    # Send deals
-    deals = []
-    if daily and len(daily) > 1:
-        for row in daily[1:]:  # Skip header
-            if len(row) < 9:
-                continue
-            deals.append({
-                "date": row[0],
-                "sales_no": row[1],
-                "subordinate": row[2],
-                "sold_amount": float(str(row[3]).replace(",","").replace("$","")) if row[3] else 0,
-                "net_price": float(str(row[4]).replace(",","").replace("$","")) if row[4] else 0,
-                "deposit_pct": row[5],
-                "volume_credits": int(row[6]) if str(row[6]).isdigit() else 0,
-                "commission_rule": row[7],
-                "manager_commission": float(row[8]) if row[8] else 0,
-                "status": row[9] if len(row) > 9 else "completed",
-                "notes": row[10] if len(row) > 10 else "",
-            })
-
-    if deals:
-        result, status = post("/api/sales/deals", deals)
+    # Send deals (from Daily Log, already parsed above)
+    if all_deals:
+        result, status = post("/api/sales/deals", all_deals)
         if result:
-            print(f"  [OK] {len(deals)} deals synced")
+            print(f"  [OK] {len(all_deals)} deals synced")
         else:
             print(f"  [FAIL] Deals sync failed ({status})")
     else:

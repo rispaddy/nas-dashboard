@@ -199,6 +199,7 @@ def sync_sales():
             total_volume = float(str(row[3]).replace(",","").replace("$","")) if row[3] else 0
             total_commission = float(str(row[6]).replace(",","").replace("$","")) if row[6] else 0
             total_deals = int(row[2]) if str(row[2]).isdigit() else 0
+            spiFF_col = float(str(row[7]).replace(",","").replace("$","")) if len(row) > 7 and row[7] else 0
         elif name:
             agents.append({
                 "name": name,
@@ -221,10 +222,13 @@ def sync_sales():
         pass
 
     # Send KPI summary (total row only)
+    # Add SPIFF to commission for display total
+    total_commission_with_spiff = total_commission + current_spiff
+
     kpi_data = {
         "month": month_label,
         "total_volume": total_volume,
-        "total_commission": total_commission,
+        "total_commission": total_commission_with_spiff,
         "total_deals": total_deals,
         "spiFF": current_spiff,
         "agents": agents,

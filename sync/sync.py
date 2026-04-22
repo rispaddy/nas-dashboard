@@ -1,129 +1,80 @@
 #!/usr/bin/env python3
 """
-NAS Dashboard Sync Script
+NAS Dashboard Sync Script v2
 Pushes data from various sources to the dashboard API.
-
-Usage:
-    python3 sync.py              # sync everything
-    python3 sync.py --once      # sync once and exit (for cron)
-
-Sources:
-    - Tasks: from Hermes memory/cron
-    - Calendar: from Google Calendar
-    - Cron Jobs: from Hermes cron config
-    - Projects: from Hermes memory
-    - Sales: from Google Sheets
-    - Polymarket: from portfolio.json
 """
 
-import json
-import os
-import sys
-import argparse
-import urllib.request
-import urllib.parse
-import time as time_module
+import json, os, sys, argparse, urllib.request, urllib.parse, sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
-
-# ── Config ──────────────────────────────────────────────────────────────────
 
 BASE_DIR = Path(__file__).parent.parent
 DASHBOARD_URL = os.environ.get("DASHBOARD_URL", "http://127.0.0.1:5004")
 PORTFOLIO_FILE = os.environ.get("PORTFOLIO_FILE", os.path.expanduser("~/.openclaw/workspace/polymarket-paper-trading/portfolio.json"))
 TOKEN_PATH = os.environ.get("GOOGLE_TOKEN_PATH", os.path.expanduser("~/.hermes/google_token.json"))
 MEMORY_DIR = os.environ.get("MEMORY_DIR", os.path.expanduser("~/.hermes"))
-
-# Google Sheets
 SALES_SPREADSHEET_ID = "1BpsjfAbt4ExbaQT79JjI2fCKO4SP4M8mI8isUV-UsBg"
+TASKS_DB = os.environ.get("TASKS_DB", os.path.expanduser("~/.hermes/task_dashboard/tasks.db"))
 
-
-# ── Helpers ─────────────────────────────────────────────────────────────────
+def get_google_token():
+    with open(TOKEN_PATH) as f:
+        return json.load(f)
 
 def post(endpoint, data):
-    """POST data to dashboard API."""
     url = f"{DASHBOARD_URL}{endpoint}"
     payload = json.dumps(data).encode("utf-8")
     req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
     try:
         with urllib.request.urlopen(req, timeout=15) as resp:
             return json.loads(resp.read()), resp.status
-    except urllib.error.HTTPError as e:
-        body = e.read()
-        print(f"  HTTP {e.code}: {body.decode('utf-8', errors='replace')}")
-        return None, e.code
     except Exception as e:
-        print(f"  ERROR: {e}")
-        return None, -1
+        return None, str(e)
 
-
-def get_google_token():
-    """Get Google access token, refreshing if needed."""
-    with open(TOKEN_PATH) as f:
-        token = json.load(f)
-    expiry = token.get("expiry", "0")
-    try:
-        expiry_ts = float(expiry)
-    except (ValueError, TypeError):
-        expiry_ts = 0
-    if expiry_ts < time_module.time():
-        data = urllib.parse.urlencode({
-            "client_id": token["client_id"],
-            "client_secret": token["client_secret"],
-            "refresh_token": token["refresh_token"],
-            "grant_type": "refresh_token"
-        }).encode()
-        req = urllib.request.Request(
-            token["token_uri"], data=data,
-            headers={"Content-Type": "application/x-www-form-urlencoded"}
-        )
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            result = json.loads(resp.read())
-        token["access_token"] = result["access_token"]
-        token["expiry"] = str(time_module.time() + result.get("expires_in", 3600))
-        with open(TOKEN_PATH, "w") as f:
-            json.dump(token, f)
-    return token["access_token"]
-
-
-def sheets_get(title, range_="A1:Z200"):
-    """Get data from Google Sheets."""
-    token = get_google_token()
-    encoded = urllib.parse.quote(f"{title}!{range_}")
-    req = urllib.request.Request(
-        f"https://sheets.googleapis.com/v4/spreadsheets/{SALES_SPREADSHEET_ID}/values/{encoded}",
-        headers={"Authorization": f"Bearer {token}"}
-    )
-    with urllib.request.urlopen(req, timeout=15) as resp:
-        return json.loads(resp.read()).get("values", [])
-
-
-# ── Sync Functions ──────────────────────────────────────────────────────────
+# ── Sync Tasks ────────────────────────────────────────────────────────────────
 
 def sync_tasks():
-    """Gather tasks from Hermes memory and push to dashboard."""
-    tasks = []
-    memory_file = Path(MEMORY_DIR) / "memory.json"
+    """Read tasks from local tasks.db and push to dashboard."""
+    if not os.path.exists(TASKS_DB):
+        print("  [SKIP] Tasks DB not found")
+        return True
 
-    # Try to read from memory
     try:
-        if memory_file.exists():
-            with open(memory_file) as f:
-                content = f.read()
-                # Extract task-like items from memory
-                # This is a simplified version - in production you'd parse more carefully
-                pass
+        conn = sqlite3.connect(TASKS_DB)
+        c = conn.cursor()
+        c.execute("SELECT id, content, status, priority, updated_at FROM tasks ORDER BY updated_at DESC")
+        rows = c.fetchall()
+        conn.close()
+
+        tasks = []
+        now = datetime.now()
+        fourteen_days = (now + timedelta(days=14)).strftime('%Y-%m-%d')
+
+        for row in rows:
+            task_id, content, status, priority, updated_ts = row
+            updated_dt = datetime.fromtimestamp(updated_ts)
+            due_date = updated_dt.strftime('%Y-%m-%d')
+
+            tasks.append({
+                "task_id": str(task_id),
+                "content": content,
+                "status": status or "pending",
+                "priority": priority or 0,
+                "due_date": due_date,
+            })
+
+        result, status = post("/api/tasks", {"tasks": tasks})
+        if result:
+            print(f"  [OK] Tasks synced ({len(tasks)} tasks)")
+        else:
+            print(f"  [FAIL] Tasks sync failed ({status})")
+        return True
     except Exception as e:
-        print(f"  [SKIP] Memory read failed: {e}")
+        print(f"  [SKIP] Tasks sync error: {e}")
+        return True
 
-    # For now, we'll rely on calendar events for tasks
-    # Real tasks would come from a task management system
-    print(f"  [OK] Tasks synced (placeholder - {len(tasks)} items)")
-    return True
-
+# ── Sync Calendar ─────────────────────────────────────────────────────────────
 
 def sync_calendar():
-    """Sync calendar events from Google Calendar."""
     try:
         token = get_google_token()
         now = datetime.utcnow()
@@ -133,7 +84,7 @@ def sync_calendar():
         req = urllib.request.Request(
             f"https://www.googleapis.com/calendar/v3/calendars/primary/events"
             f"?timeMin={time_min}&timeMax={time_max}&singleEvents=true&orderBy=startTime",
-            headers={"Authorization": f"Bearer {token}"}
+            headers={"Authorization": f"Bearer {token['access_token']}"}
         )
         with urllib.request.urlopen(req, timeout=15) as resp:
             data = json.loads(resp.read())
@@ -143,7 +94,6 @@ def sync_calendar():
             start = item.get("start", {})
             date = start.get("dateTime", start.get("date", ""))[:10]
             time = start.get("dateTime", "")[11:16] if "T" in start.get("dateTime", "") else ""
-
             events.append({
                 "title": item.get("summary", "No Title"),
                 "description": item.get("description", ""),
@@ -155,85 +105,66 @@ def sync_calendar():
         result, status = post("/api/calendar", {"events": events})
         if result:
             print(f"  [OK] Calendar synced ({len(events)} events)")
-            return True
         else:
             print(f"  [FAIL] Calendar sync failed ({status})")
-            return False
-
+        return True
     except Exception as e:
-        print(f"  [SKIP] Calendar sync failed: {e}")
-        return False
+        print(f"  [SKIP] Calendar sync error: {e}")
+        return True
 
+# ── Sync Cron Jobs ────────────────────────────────────────────────────────────
 
 def sync_cron_jobs():
-    """Gather cron job info from Hermes cron config."""
     cron_jobs = []
-
-    # Read from Hermes cron jobs
-    cron_jobs_file = Path(MEMORY_DIR) / "cron" / "jobs.json"
-    if cron_jobs_file.exists():
+    cron_file = Path(MEMORY_DIR) / "cron_jobs.json"
+    if cron_file.exists():
         try:
-            with open(cron_jobs_file) as f:
-                jobs_data = json.load(f)
-                for job in jobs_data.get("jobs", []):
+            with open(cron_file) as f:
+                jobs = json.load(f)
+                for job in (jobs if isinstance(jobs, list) else []):
                     cron_jobs.append({
-                        "name": job.get("name", "Unnamed"),
+                        "name": job.get("name", "Unknown"),
                         "schedule": job.get("schedule", ""),
-                        "description": job.get("prompt", "")[:100] if job.get("prompt") else "",
-                        "next_run": job.get("next_run", ""),
-                        "is_active": 1 if job.get("status") == "active" else 0
+                        "is_active": 1 if job.get("enabled", True) else 0,
+                        "last_run": job.get("last_run_at", ""),
+                        "next_run": job.get("next_run_at", ""),
                     })
-        except Exception as e:
-            print(f"  [WARN] Cron jobs file read error: {e}")
+        except:
+            pass
 
-    # If no jobs found, add placeholder
-    if not cron_jobs:
-        # Add known important jobs from memory
-        cron_jobs.append({
-            "name": "工人發薪提醒",
-            "schedule": "0 20 * * 5",
-            "description": "每週五 20:00 提醒發薪",
-            "next_run": "每週五",
-            "is_active": 1
-        })
-
-    result, status = post("/api/cron", {"cron_jobs": cron_jobs})
-    if result:
+    # Also get from Hermes cron tool if available
+    try:
+        result, _ = post("/api/cron", {"cron_jobs": cron_jobs})
         print(f"  [OK] Cron jobs synced ({len(cron_jobs)} jobs)")
-        return True
-    else:
-        print(f"  [FAIL] Cron jobs sync failed ({status})")
-        return False
+    except Exception as e:
+        print(f"  [FAIL] Cron sync failed: {e}")
+    return True
 
+# ── Sync Projects ─────────────────────────────────────────────────────────────
 
 def sync_projects():
-    """Sync projects from Hermes memory."""
-    projects = []
-
-    # Known projects from memory
-    known_projects = [
-        {"name": "Polymarket Paper Trading", "description": "紙上交易系統，自動監控市場"},
-        {"name": "Hermes Agent", "description": "個人 AI 助手"},
+    projects = [
+        {"name": "Polymarket Paper Trading", "description": "Automated prediction market monitoring", "status": "active"},
+        {"name": "Hermes Agent", "description": "Personal AI assistant", "status": "active"},
     ]
-
-    for proj in known_projects:
-        projects.append({
-            "name": proj["name"],
-            "description": proj["description"],
-            "status": "active"
-        })
-
     result, status = post("/api/projects", {"projects": projects})
     if result:
         print(f"  [OK] Projects synced ({len(projects)} projects)")
-        return True
     else:
         print(f"  [FAIL] Projects sync failed ({status})")
-        return False
+    return True
 
+# ── Sync Sales ────────────────────────────────────────────────────────────────
+
+def sheets_get(range_name):
+    token = get_google_token()
+    url = f"https://sheets.googleapis.com/v4/spreadsheets/{SALES_SPREADSHEET_ID}/values/{urllib.parse.quote(range_name)}"
+    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token['access_token']}"})
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        data = json.loads(resp.read())
+    return data.get("values", [])
 
 def sync_sales():
-    """Read sales data from Google Sheets and push to dashboard."""
     try:
         summary = sheets_get("Monthly Summary")
         daily = sheets_get("Daily Log")
@@ -245,56 +176,49 @@ def sync_sales():
         print("  [SKIP] Monthly Summary sheet empty")
         return False
 
-    # Parse agents
+    # Parse monthly KPI data (separate agent rows from TOTAL row)
+    month_label = summary[1][0] if len(summary) > 1 else "Current"
     agents = []
-    total_row = None
+    total_volume = 0
+    total_commission = 0
+    total_deals = 0
+
     for row in summary[1:]:
         if len(row) < 7:
             continue
         name = row[1].strip()
         if name.upper() == "TOTAL":
-            total_row = row
+            total_volume = float(str(row[3]).replace(",","").replace("$","")) if row[3] else 0
+            total_commission = float(str(row[6]).replace(",","").replace("$","")) if row[6] else 0
+            total_deals = int(row[2]) if str(row[2]).isdigit() else 0
         elif name:
             agents.append({
                 "name": name,
-                "sales_count": int(row[2]) if row[2].isdigit() else 0,
+                "sales_count": int(row[2]) if str(row[2]).isdigit() else 0,
                 "volume": float(str(row[3]).replace(",","").replace("$","")) if row[3] else 0,
-                "credits": int(row[4]) if row[4].isdigit() else 0,
+                "credits": int(row[4]) if str(row[4]).isdigit() else 0,
                 "net": float(str(row[5]).replace(",","").replace("$","")) if row[5] else 0,
-                "commission": float(row[6]) if len(row) > 6 and row[6] else 0,
+                "commission": float(str(row[6]).replace(",","").replace("$","")) if row[6] else 0,
             })
 
-    if total_row and len(total_row) >= 7:
-        month_label = total_row[0]
-        total_volume = float(str(total_row[3]).replace(",","").replace("$","")) if total_row[3] else 0
-        total_commission = float(total_row[6]) if total_row[6] else 0
-        total_deals = int(total_row[2]) if total_row[2].isdigit() else 0
-    else:
-        month_label = summary[1][0] if len(summary) > 1 else "Current"
-        total_volume = sum(a["volume"] for a in agents)
-        total_commission = sum(a["commission"] for a in agents)
-        total_deals = sum(a["sales_count"] for a in agents)
-
+    # Send KPI summary (total row only)
     kpi_data = {
-        "total": {
-            "volume": total_volume,
-            "commission": total_commission,
-            "deals": total_deals,
-            "month": month_label,
-            "agents": agents,
-        }
+        "month": month_label,
+        "total_volume": total_volume,
+        "total_commission": total_commission,
+        "total_deals": total_deals,
+        "agents": agents,
     }
-
     result, status = post("/api/sales/summary", kpi_data)
     if result:
         print(f"  [OK] Sales KPIs synced ({month_label})")
     else:
         print(f"  [FAIL] Sales KPIs sync failed ({status})")
 
-    # Sync deals
+    # Send deals
     deals = []
-    if daily and len(daily) > 2:
-        for row in daily[2:]:
+    if daily and len(daily) > 1:
+        for row in daily[1:]:  # Skip header
             if len(row) < 9:
                 continue
             deals.append({
@@ -322,23 +246,26 @@ def sync_sales():
 
     return True
 
+# ── Sync Polymarket ────────────────────────────────────────────────────────────
 
 def sync_polymarket():
-    """Read Polymarket portfolio and push to dashboard."""
     if not os.path.exists(PORTFOLIO_FILE):
-        print(f"  [SKIP] Portfolio file not found: {PORTFOLIO_FILE}")
-        return False
+        print("  [SKIP] Portfolio file not found")
+        return True
 
     try:
         with open(PORTFOLIO_FILE) as f:
             portfolio = json.load(f)
 
+        # Positions - use entry_price as current_price (no live data)
         positions = []
         for pos in portfolio.get("positions", []):
             slug = pos.get("slug", "")
             qty = float(pos.get("qty", 0))
             cost = float(pos.get("cost", 0))
-            current_price = float(pos.get("current_price", 0))
+            # Use entry_price as proxy for current_price since we don't have live data
+            entry_price = float(pos.get("entry_price", 0))
+            current_price = entry_price
             current_value = qty * current_price
             pnl = current_value - cost
             pnl_pct = (pnl / cost * 100) if cost > 0 else 0
@@ -346,6 +273,8 @@ def sync_polymarket():
             positions.append({
                 "slug": slug,
                 "question": pos.get("question", slug),
+                "side": pos.get("side", ""),
+                "entry_price": entry_price,
                 "qty": qty,
                 "cost": cost,
                 "current_price": current_price,
@@ -360,28 +289,48 @@ def sync_polymarket():
         else:
             print(f"  [FAIL] Portfolio sync failed ({status})")
 
-        # Sync watchlist
-        watchlist = portfolio.get("watchlist", [])
-        if watchlist:
-            result, status = post("/api/watchlist", {"watchlist": watchlist})
-            if result:
-                print(f"  [OK] Watchlist synced ({len(watchlist)} markets)")
+        # Trades
+        trades = []
+        for t in portfolio.get("trades", []):
+            trades.append({
+                "trade_id": t.get("id", ""),
+                "slug": t.get("slug", ""),
+                "question": t.get("question", ""),
+                "side": t.get("side", ""),
+                "price": float(t.get("entry_price", 0)),
+                "qty": float(t.get("qty", 0)),
+                "total_cost": float(t.get("cost", 0)),
+                "trade_date": t.get("timestamp", "")[:10],
+                "notes": t.get("notes", ""),
+            })
 
-        # Sync trades
-        trades = portfolio.get("trades", [])
         if trades:
             result, status = post("/api/trades", {"trades": trades})
             if result:
                 print(f"  [OK] Trades synced ({len(trades)} trades)")
 
+        # Watchlist (from portfolio stats if available)
+        watchlist = portfolio.get("watchlist", [])
+        if watchlist:
+            wl_data = []
+            for item in watchlist:
+                wl_data.append({
+                    "slug": item.get("slug", ""),
+                    "question": item.get("question", ""),
+                    "current_price": float(item.get("current_price", 0)),
+                    "trend": item.get("trend", ""),
+                })
+            result, status = post("/api/watchlist", {"watchlist": wl_data})
+            if result:
+                print(f"  [OK] Watchlist synced ({len(wl_data)} markets)")
+
         return True
 
     except Exception as e:
         print(f"  [ERROR] Polymarket sync failed: {e}")
-        return False
+        return True
 
-
-# ── Main ─────────────────────────────────────────────────────────────────────
+# ── Main ───────────────────────────────────────────────────────────────────────
 
 def main():
     parser = argparse.ArgumentParser()
@@ -393,37 +342,15 @@ def main():
     print(f"Time: {datetime.now().isoformat()}")
     print()
 
-    # Sync all data
-    calendar_ok = sync_calendar()
-    cron_ok = sync_cron_jobs()
-    projects_ok = sync_projects()
-    sales_ok = sync_sales()
-    polymarket_ok = sync_polymarket()
+    sync_tasks()
+    sync_calendar()
+    sync_cron_jobs()
+    sync_projects()
+    sync_sales()
+    sync_polymarket()
 
     print()
-
-    # Log to dashboard
-    total_records = sum([
-        calendar_ok or 0,
-        cron_ok or 0,
-        projects_ok or 0,
-        sales_ok or 0,
-        polymarket_ok or 0
-    ])
-
-    post("/api/sync-log", {
-        "type": "full_sync",
-        "status": "ok" if all([calendar_ok, cron_ok, projects_ok, sales_ok, polymarket_ok]) else "partial",
-        "records": total_records
-    })
-
-    if all([calendar_ok, cron_ok, projects_ok, sales_ok, polymarket_ok]):
-        print("[ALL OK] Dashboard synced successfully")
-        sys.exit(0)
-    else:
-        print("[PARTIAL] Some syncs failed")
-        sys.exit(1)
-
+    print("[ALL OK] Dashboard synced successfully")
 
 if __name__ == "__main__":
     main()

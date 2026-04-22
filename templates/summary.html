@@ -1,0 +1,215 @@
+{% extends "base.html" %}
+
+{% block title %}總覽{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title"><i class="bi bi-house me-2"></i>總覽</h1>
+    <p class="text-muted mb-0">所有項目、任務、日程即時概覽</p>
+</div>
+
+<!-- Stats Cards -->
+<div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+        <div class="card stat-card">
+            <div class="stat-number">{{ pending_tasks_count }}</div>
+            <div class="stat-label">待辦任務</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card stat-card">
+            <div class="stat-number">{{ upcoming_events_count }}</div>
+            <div class="stat-label"> upcoming 日程</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card stat-card">
+            <div class="stat-number">{{ active_crons_count }}</div>
+            <div class="stat-label">活跃 Cron</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card stat-card">
+            <div class="stat-number">{{ active_projects|length }}</div>
+            <div class="stat-label">進行中項目</div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Overdue Tasks -->
+    {% if overdue_tasks %}
+    <div class="col-12">
+        <div class="card border-danger">
+            <div class="card-header text-danger">
+                <i class="bi bi-exclamation-triangle me-2"></i>逾期任務 ({{ overdue_tasks|length }})
+            </div>
+            <div class="card-body p-0">
+                <div class="list-group list-group-flush">
+                    {% for task in overdue_tasks %}
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>{{ task.title }}</strong>
+                            {% if task.description %}
+                            <br><small class="text-muted">{{ task.description }}</small>
+                            {% endif %}
+                        </div>
+                        <div class="text-end">
+                            <span class="badge bg-danger">{{ task.due_date }}</span>
+                            <span class="badge bg-secondary ms-1">{{ task.priority }}</span>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Upcoming Tasks -->
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header">
+                <i class="bi bi-check2-square me-2"></i> upcoming 任務 (14日內)
+            </div>
+            <div class="card-body p-0">
+                {% if upcoming_tasks %}
+                <div class="list-group list-group-flush">
+                    {% for task in upcoming_tasks %}
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        <div class="flex-grow-1">
+                            <strong>{{ task.title }}</strong>
+                            {% if task.description %}
+                            <br><small class="text-muted">{{ task.description[:50] }}{% if task.description|length > 50 %}...{% endif %}</small>
+                            {% endif %}
+                        </div>
+                        <div class="text-end ms-3">
+                            <span class="badge badge-tasks">{{ task.due_date }}</span>
+                            {% if task.priority == 'high' %}
+                            <span class="badge bg-danger ms-1">高</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="card-body text-center text-muted py-5">
+                    <i class="bi bi-check-circle fs-1"></i>
+                    <p class="mt-2 mb-0">未來14日沒有待辦任務</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Upcoming Events -->
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header">
+                <i class="bi bi-calendar-event me-2"></i> upcoming 日程 (14日內)
+            </div>
+            <div class="card-body p-0">
+                {% if upcoming_events %}
+                <div class="list-group list-group-flush">
+                    {% for event in upcoming_events %}
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        <div class="flex-grow-1">
+                            <strong>{{ event.title }}</strong>
+                            {% if event.description %}
+                            <br><small class="text-muted">{{ event.description[:50] }}{% if event.description|length > 50 %}...{% endif %}</small>
+                            {% endif %}
+                        </div>
+                        <div class="text-end ms-3">
+                            <span class="badge badge-events">
+                                {% if event.event_time %}{{ event.event_time }}<br>{% endif %}
+                                {{ event.event_date }}
+                            </span>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="card-body text-center text-muted py-5">
+                    <i class="bi bi-calendar-x fs-1"></i>
+                    <p class="mt-2 mb-0">未來14日沒有日程</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Active Cron Jobs -->
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header">
+                <i class="bi bi-clock-history me-2"></i>活跃 Cron Jobs
+            </div>
+            <div class="card-body p-0">
+                {% if active_crons %}
+                <div class="table-responsive">
+                    <table class="table table-dark table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>名稱</th>
+                                <th>排程</th>
+                                <th>下次執行</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for cron in active_crons %}
+                            <tr>
+                                <td>
+                                    <strong>{{ cron.name }}</strong>
+                                    {% if cron.description %}
+                                    <br><small class="text-muted">{{ cron.description[:40] }}</small>
+                                    {% endif %}
+                                </td>
+                                <td><code>{{ cron.schedule }}</code></td>
+                                <td><span class="badge badge-crons">{{ cron.next_run or 'N/A' }}</span></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="card-body text-center text-muted py-5">
+                    <i class="bi bi-cron-x fs-1"></i>
+                    <p class="mt-2 mb-0">沒有活跃的 Cron Jobs</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Active Projects -->
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header">
+                <i class="bi bi-folder me-2"></i>進行中項目
+            </div>
+            <div class="card-body p-0">
+                {% if active_projects %}
+                <div class="list-group list-group-flush">
+                    {% for project in active_projects %}
+                    <div class="list-group-item">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <strong>{{ project.name }}</strong>
+                            <span class="badge badge-projects">{{ project.status }}</span>
+                        </div>
+                        {% if project.description %}
+                        <p class="text-muted mb-0 mt-1 small">{{ project.description }}</p>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="card-body text-center text-muted py-5">
+                    <i class="bi bi-folder-x fs-1"></i>
+                    <p class="mt-2 mb-0">沒有進行中項目</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

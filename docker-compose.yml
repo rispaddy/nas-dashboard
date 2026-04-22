@@ -1,0 +1,19 @@
+services:
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: nas-dashboard
+    ports:
+      - "5004:5000"
+    volumes:
+      - dashboard-data:/app/data
+    environment:
+      - FLASK_ENV=production
+      - DATA_DIR=/app/data
+      - DB_PATH=/app/data/dashboard.db
+    restart: unless-stopped
+    network_mode: bridge
+
+volumes:
+  dashboard-data:

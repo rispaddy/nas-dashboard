@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+
+{% block title %}Polymarket{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title"><i class="bi bi-graph-up me-2"></i>Polymarket</h1>
+    <p class="text-muted mb-0">紙上交易倉位及關注市場</p>
+</div>
+
+<!-- Wallet & P&L Summary -->
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="card stat-card">
+            <div class="stat-number text-primary">${{ "{:,.2f}".format(total_cost) }}</div>
+            <div class="stat-label">總成本</div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card stat-card">
+            <div class="stat-number text-info">${{ "{:,.2f}".format(total_value) }}</div>
+            <div class="stat-label">當前價值</div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card stat-card">
+            {% if total_pnl >= 0 %}
+            <div class="stat-number text-success">+${{ "{:,.2f}".format(total_pnl) }}</div>
+            {% else %}
+            <div class="stat-number text-danger">${{ "{:,.2f}".format(total_pnl) }}</div>
+            {% endif %}
+            <div class="stat-label">總 P&L</div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Open Positions -->
+    <div class="col-lg-7">
+        <div class="card h-100">
+            <div class="card-header">
+                <i class="bi bi-briefcase me-2"></i>持倉中
+            </div>
+            <div class="card-body p-0">
+                {% if positions %}
+                {% for pos in positions %}
+                <div class="card m-3 bg-dark border-secondary">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start mb-3">
+                            <div>
+                                <h5 class="mb-1">{{ pos.market_question or pos.market_slug }}</h5>
+                                <code class="small text-muted">{{ pos.market_slug }}</code>
+                            </div>
+                            <span class="badge bg-primary">持倉中</span>
+                        </div>
+
+                        <div class="row g-3 text-center">
+                            <div class="col-3">
+                                <div class="small text-muted">數量</div>
+                                <div class="fw-bold">{{ pos.qty }}</div>
+                            </div>
+                            <div class="col-3">
+                                <div class="small text-muted">成本</div>
+                                <div class="fw-bold">${{ "{:.2f}".format(pos.cost) }}</div>
+                            </div>
+                            <div class="col-3">
+                                <div class="small text-muted">當前價格</div>
+                                <div class="fw-bold">{{ "%.1f"|format(pos.current_price * 100) }}%</div>
+                            </div>
+                            <div class="col-3">
+                                <div class="small text-muted">當前價值</div>
+                                <div class="fw-bold">${{ "{:.2f}".format(pos.current_value) }}</div>
+                            </div>
+                        </div>
+
+                        <hr>
+
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                {% if pos.pnl >= 0 %}
+                                <span class="text-success fw-bold fs-5">
+                                    <i class="bi bi-arrow-up-circle"></i>
+                                    +${{ "%.2f"|format(pos.pnl) }}
+                                    (+{{ "%.0f"|format(pos.pnl_pct) }}%)
+                                </span>
+                                {% else %}
+                                <span class="text-danger fw-bold fs-5">
+                                    <i class="bi bi-arrow-down-circle"></i>
+                                    ${{ "%.2f"|format(pos.pnl) }}
+                                    ({{ "%.0f"|format(pos.pnl_pct) }}%)
+                                </span>
+                                {% endif %}
+                            </div>
+                            <a href="https://polymarket.com/market/{{ pos.market_slug }}"
+                               target="_blank"
+                               class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-box-arrow-up-right"></i> 查看市場
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+                {% else %}
+                <div class="card-body text-center text-muted py-5">
+                    <i class="bi bi-briefcase-x fs-1"></i>
+                    <p class="mt-2 mb-0">沒有持倉</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Watchlist -->
+    <div class="col-lg-5">
+        <div class="card h-100">
+            <div class="card-header">
+                <i class="bi bi-star me-2"></i>關注市場 (Watchlist)
+            </div>
+            <div class="card-body p-0">
+                {% if watchlist %}
+                <div class="list-group list-group-flush">
+                    {% for item in watchlist %}
+                    <div class="list-group-item">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div class="flex-grow-1">
+                                <strong>{{ item.market_question or item.market_slug }}</strong>
+                                <br>
+                                <code class="small text-muted">{{ item.market_slug }}</code>
+                            </div>
+                            <div class="text-end ms-3">
+                                <span class="badge bg-primary fs-6">
+                                    {{ "%.1f"|format(item.current_price * 100) }}%
+                                </span>
+                                {% if item.trend == 'up' %}
+                                <i class="bi bi-caret-up-fill text-success ms-1"></i>
+                                {% elif item.trend == 'down' %}
+                                <i class="bi bi-caret-down-fill text-danger ms-1"></i>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="card-body text-center text-muted py-5">
+                    <i class="bi bi-star-x fs-1"></i>
+                    <p class="mt-2 mb-0">沒有關注市場</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Trades -->
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-clock-history me-2"></i>交易記錄
+            </div>
+            <div class="card-body p-0">
+                {% if trades %}
+                <div class="table-responsive">
+                    <table class="table table-dark table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>日期</th>
+                                <th>市場</th>
+                                <th>操作</th>
+                                <th class="text-end">價格</th>
+                                <th class="text-end">數量</th>
+                                <th class="text-end">總成本</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for trade in trades %}
+                            <tr>
+                                <td>{{ trade.trade_date or trade.created_at[:10] }}</td>
+                                <td>
+                                    <strong>{{ trade.market_slug }}</strong>
+                                </td>
+                                <td>
+                                    {% if trade.action == 'buy' %}
+                                    <span class="badge bg-success">買入</span>
+                                    {% elif trade.action == 'sell' %}
+                                    <span class="badge bg-danger">賣出</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">{{ trade.action }}</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-end">{{ "%.2f"|format(trade.price) }}</td>
+                                <td class="text-end">{{ trade.qty }}</td>
+                                <td class="text-end">${{ "{:.2f}".format(trade.total_cost) }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="card-body text-center text-muted py-5">
+                    <i class="bi bi-clock-history fs-1"></i>
+                    <p class="mt-2 mb-0">沒有交易記錄</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

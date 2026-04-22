@@ -276,15 +276,17 @@ def sales():
     latest_kpi = dict(row) if row else None
 
     # Get all KPIs for chart (both total and agent)
-    # Deduplicate by month_label (keep latest entry per month)
+    # Deduplicate: rows with same (volume, commission, deals) = same month.
+    # Keep the row with the longer/more descriptive month_label.
     c.execute('SELECT * FROM sales_kpis ORDER BY month_label ASC')
     all_kpis_raw = [dict(row) for row in c.fetchall()]
-    seen_months = set()
-    total_kpis = []
+    seen_keys = {}  # key -> (row, label_len)
     for row in all_kpis_raw:
-        if row['month_label'] not in seen_months:
-            seen_months.add(row['month_label'])
-            total_kpis.append(row)
+        key = (round(row['total_volume'] or 0, 0), round(row['total_commission'] or 0, 2), row['total_deals'])
+        label_len = len(row['month_label'] or '')
+        if key not in seen_keys or label_len > seen_keys[key][1]:
+            seen_keys[key] = (row, label_len)
+    total_kpis = [v[0] for v in seen_keys.values()]
 
     c.execute('SELECT * FROM sales_agent_kpis ORDER BY month_label ASC, agent_volume DESC')
     agent_kpis = [dict(row) for row in c.fetchall()]

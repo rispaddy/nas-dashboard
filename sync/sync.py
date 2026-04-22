@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 BASE_DIR = Path(__file__).parent.parent
-DASHBOARD_URL = os.environ.get("DASHBOARD_URL", "http://127.0.0.1:5004")
+DASHBOARD_URL = os.environ.get("DASHBOARD_URL", "http://100.102.165.11:5004")
 PORTFOLIO_FILE = os.environ.get("PORTFOLIO_FILE", os.path.expanduser("~/.openclaw/workspace/polymarket-paper-trading/portfolio.json"))
 TOKEN_PATH = os.environ.get("GOOGLE_TOKEN_PATH", os.path.expanduser("~/.hermes/google_token.json"))
 MEMORY_DIR = os.environ.get("MEMORY_DIR", os.path.expanduser("~/.hermes"))
@@ -261,10 +261,9 @@ def sync_polymarket():
         positions = []
         for pos in portfolio.get("positions", []):
             slug = pos.get("slug", "")
-            qty = float(pos.get("qty", 0))
-            cost = float(pos.get("cost", 0))
-            # Use entry_price as proxy for current_price since we don't have live data
             entry_price = float(pos.get("entry_price", 0))
+            qty = float(pos.get("qty", 0))
+            cost = float(pos.get("cost", qty * entry_price))
             current_price = entry_price
             current_value = qty * current_price
             pnl = current_value - cost

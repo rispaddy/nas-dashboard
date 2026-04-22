@@ -31,10 +31,19 @@
             </div>
         </div>
     </div>
-    <div class="col-md-4">
+    <div class="col-md-3">
         <div class="card stat-card">
             <div class="card-body text-center">
-                <div class="stat-icon text-info"><i class="bi bi-people"></i></div>
+                <div class="stat-icon text-warning"><i class="bi bi-cash-stack"></i></div>
+                <div class="stat-value">${{ "%.2f"|format(0) }}</div>
+                <div class="stat-label">SPIFF</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card">
+            <div class="card-body text-center">
+                <div class="stat-icon text-success"><i class="bi bi-people"></i></div>
                 <div class="stat-value">{{ latest_kpi.total_deals|default(0) }}</div>
                 <div class="stat-label">Total Deals</div>
             </div>
@@ -55,7 +64,8 @@
                 <thead>
                     <tr>
                         <th>Month</th>
-                        <th>Agent</th>
+                        <th>Sales Rep</th>
+                        <th class="text-end">Deals</th>
                         <th class="text-end">Volume</th>
                         <th class="text-end">Credits</th>
                         <th class="text-end">Net</th>
@@ -67,6 +77,7 @@
                     <tr>
                         <td><span class="badge bg-secondary">{{ row.month_label[:7] }}</span></td>
                         <td><strong>{{ row.agent_name }}</strong></td>
+                        <td class="text-end">{{ row.sales_count|default(1) }}</td>
                         <td class="text-end">${{ "%.0f"|format(row.agent_volume|default(0)) }}</td>
                         <td class="text-end">{{ row.agent_credits|default(0) }}</td>
                         <td class="text-end">${{ "%.0f"|format(row.agent_net|default(0)) }}</td>
